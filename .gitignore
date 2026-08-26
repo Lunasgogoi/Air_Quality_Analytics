@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data and generated artifacts
+data/raw/*
+data/processed/*
+models/*
+
+# Keep directory placeholders
+data/raw/.gitkeep
+data/processed/.gitkeep
+models/.gitkeep
+
+# Tooling
+.vscode/
+.pytest_cache/
+.coverage
