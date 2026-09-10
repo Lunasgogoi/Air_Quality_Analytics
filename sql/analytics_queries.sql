@@ -1,2 +1,508 @@
-SELECT COUNT(DISTINCT City) AS total_cities
-FROM air_quality;
+-- AIR QUALITY ANALYTICS (SQLite)
+-- Queries are commented out. Uncomment the SQL for the section you want to run.
+-- Raw analyses use source AQI; validated analyses use the 0-500 filter.
+
+-- === 01. Dataset overview: number of cities ===
+-- SELECT COUNT(DISTINCT City) AS total_cities
+-- FROM air_quality;
+
+-- === 02. Raw AQI: city averages and data coverage ===
+-- Includes all non-null source AQI values, including outliers.
+-- SELECT
+--     City,
+--     COUNT(*) AS total_records,
+--     COUNT(AQI) AS valid_aqi_records,
+--     ROUND(
+--         COUNT(AQI) * 100.0 / COUNT(*),
+--         2
+--     ) AS aqi_coverage_percent,
+--     ROUND(AVG(AQI), 2) AS average_aqi
+-- FROM air_quality
+-- GROUP BY City
+-- ORDER BY average_aqi DESC;
+
+-- === 03. Raw AQI: city ranking with minimum data coverage ===
+-- Requires at least 500 AQI records and 80% coverage.
+-- SELECT
+--     City,
+--     COUNT(AQI) AS valid_aqi_records,
+--     ROUND(
+--         COUNT(AQI) * 100.0 / COUNT(*),
+--         2
+--     ) AS coverage_percent,
+--     ROUND(AVG(AQI), 2) AS average_aqi
+-- FROM air_quality
+-- GROUP BY City
+-- HAVING
+--     COUNT(AQI) >= 500
+--     AND COUNT(AQI) * 100.0 / COUNT(*) >= 80
+-- ORDER BY average_aqi DESC;
+
+-- === 04. Raw AQI: top 10 highest readings ===
+-- Includes the source AQI category.
+-- SELECT
+--     City,
+--     Date,
+--     AQI,
+--     AQI_Bucket
+-- FROM air_quality
+-- WHERE AQI IS NOT NULL
+-- ORDER BY AQI DESC
+-- LIMIT 10;
+
+-- === 05. Raw AQI: monthly averages by city ===
+-- SELECT
+--     City,
+--     strftime('%Y-%m', Date) AS month,
+--     ROUND(AVG(AQI), 2) AS average_aqi
+-- FROM air_quality
+-- WHERE AQI IS NOT NULL
+-- GROUP BY City, month
+-- ORDER BY City, month;
+
+-- === 06. Raw AQI: worst month for each city ===
+-- Includes ties for the highest average.
+-- WITH MonthlyAQI AS (
+--     SELECT
+--         City,
+--         strftime('%Y-%m', Date) AS month,
+--         AVG(AQI) AS average_aqi
+--     FROM air_quality
+--     WHERE AQI IS NOT NULL
+--     GROUP BY City, month
+-- ),
+
+-- RankedMonths AS (
+--     SELECT
+--         City,
+--         month,
+--         average_aqi,
+--         RANK() OVER (
+--             PARTITION BY City
+--             ORDER BY average_aqi DESC
+--         ) AS rnk
+--     FROM MonthlyAQI
+-- )
+
+-- SELECT
+--     City,
+--     month,
+--     ROUND(average_aqi, 2) AS average_aqi
+-- FROM RankedMonths
+-- WHERE rnk = 1
+-- ORDER BY average_aqi DESC;
+
+-- === 07. Raw AQI: change from the previous available month ===
+-- Gaps can span more than one calendar month.
+-- WITH MonthlyAQI AS (
+--     SELECT
+--         City,
+--         strftime('%Y-%m', Date) AS month,
+--         AVG(AQI) AS average_aqi
+--     FROM air_quality
+--     WHERE AQI IS NOT NULL
+--     GROUP BY City, month
+-- ),
+
+-- AQIChange AS (
+--     SELECT
+--         City,
+--         month,
+--         average_aqi,
+--         LAG(average_aqi) OVER (
+--             PARTITION BY City
+--             ORDER BY month
+--         ) AS previous_month_aqi
+--     FROM MonthlyAQI
+-- )
+
+-- SELECT
+--     City,
+--     month,
+--     ROUND(average_aqi, 2) AS average_aqi,
+--     ROUND(previous_month_aqi, 2) AS previous_month_aqi,
+--     ROUND(
+--         average_aqi - previous_month_aqi,
+--         2
+--     ) AS change
+-- FROM AQIChange;
+
+-- === 08. Source AQI categories: record counts and percentages ===
+-- Counts city-date records, not distinct calendar days across the dataset.
+-- SELECT
+--     AQI_Bucket,
+--     COUNT(*) AS total_days,
+--     ROUND(
+--         COUNT(*) * 100.0 /
+--         (
+--             SELECT COUNT(*)
+--             FROM air_quality
+--             WHERE AQI_Bucket IS NOT NULL
+--         ),
+--         2
+--     ) AS percentage
+-- FROM air_quality
+-- WHERE AQI_Bucket IS NOT NULL
+-- GROUP BY AQI_Bucket
+-- ORDER BY total_days DESC;
+
+-- === 09. Raw pollutants: paired PM2.5 and AQI city averages ===
+-- Uses only records where both PM2.5 and AQI are present.
+-- SELECT
+--     City,
+--     ROUND(AVG("PM2.5"), 2) AS average_pm25,
+--     ROUND(AVG(AQI), 2) AS average_aqi
+-- FROM air_quality
+-- WHERE
+--     "PM2.5" IS NOT NULL
+--     AND AQI IS NOT NULL
+-- GROUP BY City
+-- ORDER BY average_pm25 DESC;
+
+-- === 10. Data quality: overall share of AQI readings above 500 ===
+-- SELECT
+--     COUNT(AQI) AS valid_aqi_records,
+--     SUM(CASE WHEN AQI > 500 THEN 1 ELSE 0 END) AS above_500,
+--     ROUND(
+--         SUM(CASE WHEN AQI > 500 THEN 1 ELSE 0 END) * 100.0
+--         / COUNT(AQI),
+--         2
+--     ) AS above_500_percent
+-- FROM air_quality
+-- WHERE AQI IS NOT NULL;
+
+-- === 11. Data quality: readings above 500 by city ===
+-- SELECT
+--     City,
+--     COUNT(AQI) AS valid_records,
+--     SUM(CASE WHEN AQI > 500 THEN 1 ELSE 0 END) AS above_500,
+--     ROUND(MAX(AQI), 2) AS max_aqi
+-- FROM air_quality
+-- WHERE AQI IS NOT NULL
+-- GROUP BY City
+-- HAVING SUM(CASE WHEN AQI > 500 THEN 1 ELSE 0 END) > 0
+-- ORDER BY above_500 DESC;
+
+-- === 12. Data quality: top 20 readings above 500 with pollutants ===
+-- SELECT
+--     City,
+--     Date,
+--     AQI,
+--     "PM2.5",
+--     PM10,
+--     NO2,
+--     CO,
+--     SO2,
+--     O3,
+--     AQI_Bucket
+-- FROM air_quality
+-- WHERE AQI > 500
+-- ORDER BY AQI DESC
+-- LIMIT 20;
+
+-- === 13. Setup: recreate the validated AQI view ===
+-- Run both statements before the validated analyses below.
+-- AQI preserves the source value. Valid_AQI keeps values from 0 to 500.
+-- AQI_Outlier flags values below 0 or above 500; missing AQI is not flagged.
+-- DROP VIEW IF EXISTS air_quality_validated;
+
+-- CREATE VIEW air_quality_validated AS
+-- SELECT
+--     *,
+--     CASE
+--         WHEN AQI BETWEEN 0 AND 500 THEN AQI
+--         ELSE NULL
+--     END AS Valid_AQI,
+
+--     CASE
+--         WHEN AQI < 0 OR AQI > 500 THEN 1
+--         ELSE 0
+--     END AS AQI_Outlier
+-- FROM air_quality;
+
+-- === 14. Validated AQI: retained records and flagged outliers ===
+-- SELECT
+--     COUNT(*) AS total_rows,
+--     COUNT(AQI) AS original_aqi,
+--     COUNT(Valid_AQI) AS validated_aqi,
+--     SUM(AQI_Outlier) AS flagged_outliers
+-- FROM air_quality_validated;
+
+-- === 15. Validated AQI: city averages and data coverage ===
+-- SELECT
+--     City,
+--     COUNT(*) AS total_records,
+--     COUNT(Valid_AQI) AS valid_aqi_records,
+--     ROUND(
+--         COUNT(Valid_AQI) * 100.0 / COUNT(*),
+--         2
+--     ) AS coverage_percent,
+--     ROUND(AVG(Valid_AQI), 2) AS average_aqi
+-- FROM air_quality_validated
+-- GROUP BY City
+-- ORDER BY average_aqi DESC;
+
+-- === 16. Validated AQI: city ranking with minimum data coverage ===
+-- Requires at least 500 validated AQI records and 80% coverage.
+-- SELECT
+--     City,
+--     COUNT(Valid_AQI) AS valid_aqi_records,
+--     ROUND(
+--         COUNT(Valid_AQI) * 100.0 / COUNT(*),
+--         2
+--     ) AS coverage_percent,
+--     ROUND(AVG(Valid_AQI), 2) AS average_aqi
+-- FROM air_quality_validated
+-- GROUP BY City
+-- HAVING
+--     COUNT(Valid_AQI) >= 500
+--     AND COUNT(Valid_AQI) * 100.0 / COUNT(*) >= 80
+-- ORDER BY average_aqi DESC;
+
+-- === 17. Validated AQI: monthly averages by city ===
+-- SELECT
+--     City,
+--     strftime('%Y-%m', Date) AS month,
+--     ROUND(AVG(Valid_AQI), 2) AS average_aqi
+-- FROM air_quality_validated
+-- WHERE Valid_AQI IS NOT NULL
+-- GROUP BY City, month
+-- ORDER BY City, month;
+
+-- === 18. Validated AQI: worst month for each city ===
+-- Includes ties for the highest average.
+-- WITH MonthlyAQI AS (
+--     SELECT
+--         City,
+--         strftime('%Y-%m', Date) AS month,
+--         AVG(Valid_AQI) AS average_aqi
+--     FROM air_quality_validated
+--     WHERE Valid_AQI IS NOT NULL
+--     GROUP BY City, month
+-- ),
+-- RankedMonths AS (
+--     SELECT
+--         City,
+--         month,
+--         average_aqi,
+--         RANK() OVER (
+--             PARTITION BY City
+--             ORDER BY average_aqi DESC
+--         ) AS rnk
+--     FROM MonthlyAQI
+-- )
+-- SELECT
+--     City,
+--     month,
+--     ROUND(average_aqi, 2) AS average_aqi
+-- FROM RankedMonths
+-- WHERE rnk = 1
+-- ORDER BY average_aqi DESC;
+
+-- === 19. Validated AQI: change from the previous available month ===
+-- Gaps can span more than one calendar month.
+-- WITH MonthlyAQI AS (
+--     SELECT
+--         City,
+--         strftime('%Y-%m', Date) AS month,
+--         AVG(Valid_AQI) AS average_aqi
+--     FROM air_quality_validated
+--     WHERE Valid_AQI IS NOT NULL
+--     GROUP BY City, month
+-- ),
+-- Changes AS (
+--     SELECT
+--         City,
+--         month,
+--         average_aqi,
+--         LAG(average_aqi) OVER (
+--             PARTITION BY City
+--             ORDER BY month
+--         ) AS previous_month_aqi
+--     FROM MonthlyAQI
+-- )
+-- SELECT
+--     City,
+--     month,
+--     ROUND(average_aqi, 2) AS average_aqi,
+--     ROUND(previous_month_aqi, 2) AS previous_month_aqi,
+--     ROUND(average_aqi - previous_month_aqi, 2) AS change
+-- FROM Changes
+-- ORDER BY City, month;
+
+-- === 20. Validated AQI: seasonal averages by city ===
+-- Pools matching seasons across all years.
+-- SELECT
+--     City,
+--     CASE
+--         WHEN CAST(strftime('%m', Date) AS INTEGER) IN (12, 1, 2)
+--             THEN 'Winter'
+--         WHEN CAST(strftime('%m', Date) AS INTEGER) IN (3, 4, 5)
+--             THEN 'Summer'
+--         WHEN CAST(strftime('%m', Date) AS INTEGER) IN (6, 7, 8, 9)
+--             THEN 'Monsoon'
+--         ELSE 'Post-Monsoon'
+--     END AS season,
+--     ROUND(AVG(Valid_AQI), 2) AS average_aqi,
+--     COUNT(Valid_AQI) AS valid_days
+-- FROM air_quality_validated
+-- WHERE Valid_AQI IS NOT NULL
+-- GROUP BY City, season
+-- ORDER BY City, average_aqi DESC;
+
+-- === 21. Validated AQI: worst season for each city ===
+-- Pools all years and includes ties for the highest seasonal average.
+-- WITH SeasonalAQI AS (
+--     SELECT
+--         City,
+--         CASE
+--             WHEN CAST(strftime('%m', Date) AS INTEGER) IN (12, 1, 2)
+--                 THEN 'Winter'
+--             WHEN CAST(strftime('%m', Date) AS INTEGER) IN (3, 4, 5)
+--                 THEN 'Summer'
+--             WHEN CAST(strftime('%m', Date) AS INTEGER) IN (6, 7, 8, 9)
+--                 THEN 'Monsoon'
+--             ELSE 'Post-Monsoon'
+--         END AS season,
+--         AVG(Valid_AQI) AS average_aqi
+--     FROM air_quality_validated
+--     WHERE Valid_AQI IS NOT NULL
+--     GROUP BY City, season
+-- ),
+-- Ranked AS (
+--     SELECT
+--         City,
+--         season,
+--         average_aqi,
+--         RANK() OVER (
+--             PARTITION BY City
+--             ORDER BY average_aqi DESC
+--         ) AS rnk
+--     FROM SeasonalAQI
+-- )
+-- SELECT
+--     City,
+--     season,
+--     ROUND(average_aqi, 2) AS average_aqi
+-- FROM Ranked
+-- WHERE rnk = 1
+-- ORDER BY average_aqi DESC;
+
+-- === 22. Validated AQI: rolling average over 7 rows with coverage ===
+-- Retains missing AQI rows. Represents 7 days only if dates are daily and unique per city.
+-- SELECT
+--     City,
+--     Date,
+--     Valid_AQI,
+--     ROUND(
+--         AVG(Valid_AQI) OVER (
+--             PARTITION BY City
+--             ORDER BY Date
+--             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+--         ),
+--         2
+--     ) AS rolling_7_day_aqi,
+
+--     COUNT(Valid_AQI) OVER (
+--         PARTITION BY City
+--         ORDER BY Date
+--         ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+--     ) AS valid_days_in_window
+-- FROM air_quality_validated
+-- ORDER BY City, Date;
+
+-- === 23. Validated AQI: rolling average over 30 rows with coverage ===
+-- Retains missing AQI rows. Represents 30 days only if dates are daily and unique per city.
+-- SELECT
+--     City,
+--     Date,
+--     Valid_AQI,
+--     ROUND(
+--         AVG(Valid_AQI) OVER (
+--             PARTITION BY City
+--             ORDER BY Date
+--             ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
+--         ),
+--         2
+--     ) AS rolling_30_day_aqi,
+
+--     COUNT(Valid_AQI) OVER (
+--         PARTITION BY City
+--         ORDER BY Date
+--         ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
+--     ) AS valid_days_in_window
+-- FROM air_quality_validated
+-- ORDER BY City, Date;
+
+-- === 24. Validated AQI: change from the previous available year ===
+-- Shows absolute and percentage changes; gaps can span more than one calendar year.
+-- WITH YearlyAQI AS (
+--     SELECT
+--         City,
+--         CAST(strftime('%Y', Date) AS INTEGER) AS year,
+--         AVG(Valid_AQI) AS average_aqi
+--     FROM air_quality_validated
+--     WHERE Valid_AQI IS NOT NULL
+--     GROUP BY City, year
+-- ),
+-- Changes AS (
+--     SELECT
+--         City,
+--         year,
+--         average_aqi,
+--         LAG(average_aqi) OVER (
+--             PARTITION BY City
+--             ORDER BY year
+--         ) AS previous_year_aqi
+--     FROM YearlyAQI
+-- )
+-- SELECT
+--     City,
+--     year,
+--     ROUND(average_aqi, 2) AS average_aqi,
+--     ROUND(previous_year_aqi, 2) AS previous_year_aqi,
+--     ROUND(average_aqi - previous_year_aqi, 2) AS absolute_change,
+--     ROUND(
+--         (average_aqi - previous_year_aqi) * 100.0 /
+--         previous_year_aqi,
+--         2
+--     ) AS percentage_change
+-- FROM Changes
+-- ORDER BY City, year;
+
+-- === 25. Validated AQI: share of readings above 200 by city ===
+-- Requires at least 500 validated AQI records.
+-- SELECT
+--     City,
+--     COUNT(Valid_AQI) AS valid_days,
+
+--     SUM(
+--         CASE WHEN Valid_AQI > 200 THEN 1 ELSE 0 END
+--     ) AS poor_or_worse_days,
+
+--     ROUND(
+--         SUM(CASE WHEN Valid_AQI > 200 THEN 1 ELSE 0 END)
+--         * 100.0 / COUNT(Valid_AQI),
+--         2
+--     ) AS poor_or_worse_percent
+
+-- FROM air_quality_validated
+-- WHERE Valid_AQI IS NOT NULL
+-- GROUP BY City
+-- HAVING COUNT(Valid_AQI) >= 500
+-- ORDER BY poor_or_worse_percent DESC;
+
+-- === 26. Pollutants and validated AQI: city averages ===
+-- Each average uses its own non-null records; sample counts can differ by pollutant.
+-- SELECT
+--     City,
+--     ROUND(AVG("PM2.5"), 2) AS avg_pm25,
+--     ROUND(AVG(PM10), 2) AS avg_pm10,
+--     ROUND(AVG(NO2), 2) AS avg_no2,
+--     ROUND(AVG(CO), 2) AS avg_co,
+--     ROUND(AVG(SO2), 2) AS avg_so2,
+--     ROUND(AVG(O3), 2) AS avg_o3,
+--     ROUND(AVG(Valid_AQI), 2) AS avg_aqi
+-- FROM air_quality_validated
+-- GROUP BY City
+-- ORDER BY avg_aqi DESC;
