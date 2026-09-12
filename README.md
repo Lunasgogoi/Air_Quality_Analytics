@@ -11,7 +11,7 @@ the saved sklearn/XGBoost pipeline. It does not train models or modify the data.
 From the project root, activate an environment with the dependencies installed:
 
 ```bash
-pip install -r requirements.txt
+pip install -r app/requirements.txt
 streamlit run app/app.py
 ```
 
@@ -32,6 +32,35 @@ streamlit run app/app.py
 
 Open the local URL printed by Streamlit, normally `http://localhost:8501`.
 Paths are resolved from the application files, with no hardcoded Windows paths.
+
+## Deploy on Streamlit Community Cloud
+
+Use repository `Lunasgogoi/Air_Quality_Analytics`, branch `main`, and main file path
+`app/app.py`. Select **Python 3.13** in Advanced settings. The runtime package pins
+require Python 3.12 or newer; Python 3.13 matches the original training environment.
+
+The app has a small UTF-8 dependency file at `app/requirements.txt`. Community
+Cloud [checks the entrypoint directory first](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies),
+so it installs this file instead of the root notebook environment. The root
+`requirements.txt` is preserved, including notebook tools and Windows-only
+`pywinpty`, which cannot be installed on the Linux deployment host. Keep the saved
+model's scikit-learn and XGBoost versions pinned to avoid pickle incompatibilities.
+
+Push these runtime artifacts along with the application code:
+
+- `data/airlens.db` (already tracked)
+- `data/processed/engineered_air_quality.csv`
+- `models/aqi_forecasting_model.pkl`
+- `data/processed/anomaly_results.csv` when the final export is available
+
+The `.gitignore` exceptions allow only these processed/model artifacts; raw data
+and other generated files remain excluded. Missing model/data files will prevent
+the corresponding dashboard pages from working after dependency installation.
+
+After committing and pushing the deployment changes, let Community Cloud rebuild
+the app. If installation still fails, inspect the first `ERROR` above the final
+"installer returned a non-zero exit code" message; the final message alone does
+not identify the failed dependency.
 
 ## Dashboard pages
 

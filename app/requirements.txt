@@ -1,0 +1,10 @@
+# Dashboard runtime for Streamlit Community Cloud (Python 3.13 recommended).
+# Keep the saved pipeline's package versions; the root file is the notebook environment.
+streamlit==1.63.0
+plotly==7.0.0
+pandas==3.0.5
+numpy==2.5.2
+scikit-learn==1.9.0
+scipy==1.18.1
+xgboost==3.4.1
+joblib==1.6.0

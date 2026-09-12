@@ -19,6 +19,11 @@ data/raw/*
 data/processed/*
 models/*
 
+# Runtime artifacts required by the deployed dashboard
+!data/processed/engineered_air_quality.csv
+!data/processed/anomaly_results.csv
+!models/aqi_forecasting_model.pkl
+
 # Keep directory placeholders
 data/raw/.gitkeep
 data/processed/.gitkeep
